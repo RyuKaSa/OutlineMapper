@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 image_path = 'path/to/your/image.png'
 threshold = 0.04
 min_pixels = 100
-n_clusters = 8
+n_clusters = 5
 
 # Get the image with black outlines
 outlined_image = process_image(image_path, threshold, min_pixels, n_clusters, return_format="outlined_image")

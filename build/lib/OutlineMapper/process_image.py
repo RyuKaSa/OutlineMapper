@@ -98,9 +98,25 @@ def merge_small_zones(zones, image_matrix, min_pixels):
     return large_zones
 
 def process_image(image_path, threshold=0.02, min_pixels=100, n_clusters=8, return_format="outlined_image"):
+    # Security checks
+    if threshold < 0.01:
+        threshold = 0.01
+    elif threshold > 0.999:
+        threshold = 0.999
+
+    if n_clusters < 2:
+        n_clusters = 2
+    elif n_clusters > 99:
+        n_clusters = 99
+
     image = Image.open(image_path)
     image_rgb = image.convert('RGB')
     image_matrix = np.array(image_rgb)
+
+    if min_pixels < 1:
+        min_pixels = 1
+    elif min_pixels > image_matrix.shape[0] * image_matrix.shape[1]:
+        min_pixels = image_matrix.shape[0] * image_matrix.shape[1]
 
     clustered_image_matrix = cluster_colors(image_matrix, n_clusters=n_clusters)
 
@@ -112,26 +128,43 @@ def process_image(image_path, threshold=0.02, min_pixels=100, n_clusters=8, retu
     for x, y in all_edge_pixels:
         outlined_image[x, y] = [0, 0, 0]
 
-    colored_image = np.zeros_like(clustered_image_matrix)
+    weighted_colored_image = np.zeros_like(clustered_image_matrix)
     for zone in merged_zones:
         if zone:
             average_color = np.mean([clustered_image_matrix[x, y] for x, y in zone], axis=0)
             for x, y in zone:
-                colored_image[x, y] = average_color
+                weighted_colored_image[x, y] = average_color
+
+    local_colored_image = np.zeros_like(clustered_image_matrix)
+    for zone in merged_zones:
+        if zone:
+            local_zone_colors = np.mean([clustered_image_matrix[x, y] for x, y in zone], axis=0)
+            for x, y in zone:
+                local_colored_image[x, y] = local_zone_colors
 
     if return_format == "outlined_image":
-        return outlined_image
+        output_image = outlined_image
     elif return_format == "mask":
         mask = np.ones_like(image_matrix) * 255
         for x, y in all_edge_pixels:
             mask[x, y] = [0, 0, 0]
-        return mask
-    elif return_format == "colored_zones":
-        return colored_image
-    elif return_format == "colored_zones_with_outlines":
-        colored_zones_with_outlines = colored_image.copy()
+        output_image = mask
+    elif return_format == "weighted_colored_zones":
+        output_image = weighted_colored_image
+    elif return_format == "local_colored_zones":
+        output_image = local_colored_image
+    elif return_format == "rgbm":
+        rgbm_image = np.zeros((image_matrix.shape[0], image_matrix.shape[1], 4), dtype=np.uint8)
+        rgbm_image[:, :, :3] = image_matrix
+        mask = np.zeros((image_matrix.shape[0], image_matrix.shape[1]), dtype=np.uint8)
         for x, y in all_edge_pixels:
-            colored_zones_with_outlines[x, y] = [0, 0, 0]
-        return colored_zones_with_outlines
+            mask[x, y] = 1
+        rgbm_image[:, :, 3] = mask
+        output_image = rgbm_image
     else:
         raise ValueError("Invalid return format specified")
+
+    if return_format != "rgbm" and output_image.shape[2] != 3:
+        raise ValueError("Output image must have 3 channels for the selected return format")
+
+    return output_image
